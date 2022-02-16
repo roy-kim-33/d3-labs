@@ -1,0 +1,166 @@
+<html>
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+  .states {
+    fill: #ccc;
+    stroke: #fff;
+  }
+
+  .symbol {
+    fill-opacity: .8;
+    stroke: #fff;
+  }
+</style>
+
+<body>
+
+  <div>
+    Variable to map to size: <select id="sizeSelection" class="dropdown"></select><br>
+    Variable to map to color: <select id="colorSelection" class="dropdown"></select>
+  </div>
+  
+  <!-- d3 v7 integration -->
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <!-- d3 topojson -->
+  <script src="http://d3js.org/topojson.v1.min.js"></script>
+
+  <script>
+    let width = 960,
+      height = 500;
+
+    let projection = d3.geoAlbersUsa();
+    let path = d3.geoPath()
+      .projection(projection);
+
+    let svg = d3.select("body").append("svg")
+      .attr("width", width)
+      .attr("height", height);
+
+    let variableOptions = ["none", "population", "unemployment"];
+    let sizeVar = "none";
+    let colorVar = "none";
+
+    // Adding drop-down options to sizeSelection
+    d3.select("#sizeSelection")
+      .selectAll('myOptions')
+        .data(variableOptions)
+      .enter()
+        .append('option')
+      .text(function (d) {return d;})
+      .attr("value", function (d) {return d;});
+      
+    // Updating global variable sizeVar to match option on sizeSelection drop-down menu
+    d3.select("#sizeSelection").on("change", function(d) {
+        // recover the option that has been chosen
+      sizeVar = d3.select(this).property("value")
+      drawCircles()
+    })
+
+    // Adding drop-down options to colorSelection
+    d3.select("#colorSelection")
+      .selectAll('myOptions')
+        .data(variableOptions)
+      .enter()
+        .append('option')
+      .text(function (d) {return d;})
+      .attr("value", function (d) {return d;});
+      
+    // Updating global variable sizeVar to match option on sizeSelection drop-down menu
+    d3.select("#colorSelection").on("change", function(d) {
+        // recover the option that has been chosen
+      colorVar = d3.select(this).property("value")
+      drawCircles()
+    })
+
+
+
+    let us, states, centroid;
+
+    function drawStates() {
+      svg.append("path")
+        .attr("class", "states")
+        .datum(topojson.feature(states, states.objects.usStates))
+        .attr("d", path)
+    }
+
+    function drawCircles() {
+      
+      let t = d3.transition()
+        .duration(500);
+
+      let sizeScale = d3.scaleSqrt()
+        .domain([d3.min(centroid.features, d => d.properties[sizeVar]), 
+                d3.max(centroid.features, d => d.properties[sizeVar])])
+			  .range([5, 30])
+        .unknown(10);
+      
+      let colorScale = d3.scaleLinear()
+			  .domain([d3.min(centroid.features, d => d.properties[colorVar]),
+                d3.max(centroid.features, d => d.properties[colorVar])])
+			  .range(["green", "blue"])
+        .unknown("green");
+
+      svg.selectAll(".symbol")
+        .data(centroid.features.sort((a, b) => b.properties.population - a.properties.population))
+        .join(
+          enter => enter.append("path")
+            .attr("class", "symbol")
+            .attr("fill", "green")
+            .attr("d", path.pointRadius(d => 10))
+            .on("mouseover", function(event, d) {
+                // console.log(d.properties.population);
+                d3.select(".info")
+                  .style("opacity", 1)
+                d3.select(".info .state_name")
+                  .text(`State: ${d.properties.name}`)              
+                d3.select(".info .state_population")
+                  .text(`Population: ${d.properties.population}`)
+                d3.select(".info .state_unemployment")
+                  .text(`Unemployment: ${d.properties.unemployment}%`)
+              })
+            .on("mouseout", function(event, d) {
+              d3.select(".info")
+                .transition(d3.transition().duration(300))
+                .style("opacity",0)
+              // d3.select(".info .state_name")
+              //   .style("opacity", 0)
+              // d3.select(".info .state_population")
+              //   .style("opacity", 0)
+              // d3.select(".info .state_unemployment")
+              //   .style("opacity", 0)
+            })
+          ,
+          update => update
+            .transition(t)
+            // .attr("class", "symbol")
+            // .attr("fill", "rgb(255,0,0)")
+            // .attr("d", path.pointRadius(d => 30))
+            .attr("d", path.pointRadius(d => sizeScale(d.properties[sizeVar])))
+            .attr("fill",  d => colorScale(d.properties[colorVar]))
+            // .attr("fill", function(d){return colorScale(d.properties[colorVar])})
+        )
+    }
+
+    async function ready() {
+      // load files async; store the values so we can use them later
+      states = await d3.json("states.json");
+      centroid = await d3.json("states-centroid-data.json");
+
+      drawStates();
+      drawCircles();
+    }
+    
+    // call the function that draws
+    ready();
+    
+  </script>
+
+</body>
+<div class="info">
+  <h2 class="state_name"></h2>
+  <h2 class="state_population"></h2>
+  <h2 class="state_unemployment"></h2>
+</div>
+
+</html>

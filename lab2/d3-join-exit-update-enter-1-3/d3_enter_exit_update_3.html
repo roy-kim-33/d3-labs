@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Lab-5</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+
+</head>
+<body>
+
+
+<script>
+    data1 = [
+        {"name": "A", "salary": 5},
+        {"name": "B", "salary": 2},
+        {"name": "C", "salary": 3}
+    ]
+
+    data2 = [
+        {"name": "C", "salary": 2},
+        {"name": "A", "salary": 4},
+        {"name": "B", "salary": 8},
+        {"name": "D", "salary": 1}
+    ]
+
+    data3 = [
+        {"name": "A", "salary": 3},
+        {"name": "C", "salary": 9},
+        {"name": "D", "salary": 4}
+    ]
+
+    //chart dimensions
+    w = 500
+    h = 300
+    margin = {top: 50, right: 20, bottom: 20, left: 40}
+    width = w - margin.left - margin.right
+    height = h - margin.top - margin.bottom
+
+    //create blank chart
+    svg = d3.select("body")
+        .append("svg")
+        .attr("width", w)
+        .attr("height", h)
+        .attr("id", "chart")
+        .append("g")
+        .attr("transform", "translate(" + margin.left + "," + margin.top + ")")
+
+    //create scales
+    x = d3.scaleBand()
+        .domain(["A", "B", "C", "D"])
+        .range([0, width])
+        .paddingInner(0.1)
+
+    y = d3.scaleLinear()
+        .domain([0, 10])
+        .range([height, 0])
+
+    svg.append("g")
+        .attr("class", "x_axis")
+        .attr("transform", "translate(0," + height + ")")
+        .call(d3.axisBottom(x))
+
+    svg.append("g")
+        .attr("class", "y_axis")
+        .call(d3.axisLeft(y))
+
+    function drawBars(data) {
+      // default transition settings
+      t = d3.transition()
+        .duration(2000);
+      
+      svg.selectAll("rect.bar")
+        .data(data, (d) => d.name)
+        .join(
+	        //ENTER (elements to be created)
+          enter => enter
+            .append("rect")
+            .attr("class", "bar")
+            .attr("x", d => x(d.name))
+            .attr("width", x.bandwidth())
+            .attr("y", y(0))
+            .attr("fill", "#4daf4a")
+            .transition(t)
+            .attr("y", d => y(d.salary))
+            .attr("height", d => height - y(d.salary))
+            ,
+
+	        //UPDATE (elements to be updated)
+          update => update
+            .attr("fill", "#377eb8")
+            .transition(t)
+            .attr("x", d => x(d.name))
+            .attr("width", x.bandwidth())
+            .attr("y", d => y(d.salary))
+            .attr("height", d => height - y(d.salary))
+            ,
+
+          //EXIT (elements to be removed)
+          exit => exit
+            .attr("fill", "#e41a1c")
+            .transition(t)
+            .attr("y", y(0))
+            .attr("height", 0)
+            .remove()
+        )
+    }
+    drawBars(data2)
+
+</script>
+
+
+</body>
+</html>

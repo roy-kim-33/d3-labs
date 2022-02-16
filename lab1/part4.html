@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<meta charset="utf-8">
+<style>
+</style>
+
+<body>
+  <svg></svg>
+</body>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+
+<script>
+
+  var margin = { top: 20, right: 20, bottom: 20, left: 30 };
+  var width = 400 - margin.left - margin.right;
+  var height = 400 - margin.top - margin.bottom;
+
+  var svg = d3.select("svg")
+    .style("width", '400px')
+    .style("height", '400px')
+    // uncomment the line below to see the canvas size
+    // .style("outline", '3px solid green')
+    .append("g")
+    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+  // add your code here
+  
+  // Part 1
+  var dataset = [
+    [5, 20], [480, 90], [250, 50], [100, 33], [330, 95],
+    [410, 12], [475, 44], [25, 67], [85, 21], [220, 88],
+  ];
+
+  // pivoted dataset
+//   var dataset = [
+//     [20, 5], [90, 480], [50, 250], [33, 100], [95,330],
+//     [12, 410], [44, 475], [67, 25], [21, 85], [88, 220]
+//   ];
+
+  // practice scale
+  var scale = d3.scaleLinear()
+    .domain([100, 500])
+    .range([10, 350]);
+  
+  // Part 2
+  // determinig whether x or y coordinates has maximum
+  var x_max = d3.max(dataset, d => d[0]);
+  var y_max = d3.max(dataset, d => d[1]);
+  var MAX = d3.max([x_max, y_max]);
+
+  // scales for x and y coordinates
+  var xScale = d3.scaleLinear()
+    .domain([0, MAX])
+    .range([0, width]);
+
+  var yScale = d3.scaleLinear()
+    .domain([0, MAX])
+    .range([height, 0]); // puts origin on bottom right by flipping y-axis
+
+  // drawing circles
+  svg.selectAll("circle")       // Find all circle elements
+    .data(dataset)             // Compare them against the dataset
+    .enter().append("circle")  // Create new circle elements for each data point
+    .attr("cx", d => xScale(d[0]))  // Use the x and y mappings (xScale/yScale) to
+    .attr("cy", d => yScale(d[1]))  // determine the center of the circle
+    .attr("r", 5);                  // Set the radius to 5
+
+  // Part 3
+  // axes
+  var xAxis = d3.axisBottom()
+    .scale(xScale);
+  
+  svg.append("g")
+    .attr("transform", "translate(0," + height + ")") // moves the axis down by "height" 
+    .call(xAxis);
+
+  var yAxis = d3.axisLeft()
+    .scale(yScale); 
+  
+  svg.append("g") 
+    .call(yAxis);
+    
+  // Part 4
+  // animation
+  // reset everything to color=black, radius=3 
+  circles = svg.selectAll("circle")
+   .data(dataset)
+   .attr("fill","black")
+   .attr("r",3); 
+
+  // transition to magenta with a radius of 6 over 1 seconds 
+  transition1 = circles.transition()
+   .duration(1000)
+   .attr("fill","magenta")
+   .attr("r", 6); 
+
+  // transition to black with a radius of 3 after a delay of 1 second
+  // and make the transition take 1 second
+  transition2 = transition1.transition() 
+   .delay(1000)
+   .duration(3000) // transition occurs over 3000ms
+   .attr("fill", "black")
+   .attr("r", 3)
+   .attr("cx", d => width*Math.random()) // changing x and y positions to random positions
+   .attr("cy", d => height*Math.random());
+
+
+
+</script>
+
+
+</html>

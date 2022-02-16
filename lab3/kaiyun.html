@@ -1,0 +1,194 @@
+<style>
+    .states {
+      fill: #ccc;
+      stroke: #fff;
+    }
+  
+    .symbol {
+      fill-opacity: .8;
+      stroke: #fff;
+    }
+</style>
+<body>
+    <svg class = "map"></svg>
+	<svg class = "scatterPlot"></svg>
+</body>
+
+
+
+  <!-- d3 v7 integration -->
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <!-- d3 topojson -->
+  <script src="http://d3js.org/topojson.v1.min.js"></script>
+
+
+<script>
+// This part is for map
+    let width_map = 960, height_map = 500;
+    let projection = d3.geoAlbersUsa();
+    let path = d3.geoPath().projection(projection);
+   
+    d3.selectAll("svg")
+        .style("display", "inline-block");
+
+    let svg_map = d3.select(".map")
+
+                .attr("width", width_map)
+                .attr("height", height_map)
+                .attr("transform", "scale(1,1)");
+                
+// scatter plot
+    var margin = {
+        top: 20,
+        right: 20,
+        bottom: 20,
+        left: 20
+        };
+    
+
+    var svg_scatter = d3.select(".scatterPlot")
+        .attr("width", width_map -margin.left)
+        .attr("height", height_map + margin.top )
+        // uncomment the line below to see the canvas size
+        .style("outline", '3px solid green')
+        .attr("transform", "scale(1,1)")
+        .append("g").attr("transform", "translate(" + (margin.left + margin.right) + "," + margin.top + ")");
+
+
+// This is for brush
+
+    
+//combined function
+
+    let us, states, centroid;
+
+    function drawStates() {
+        svg_map.append("path")
+        .attr("class", "states")
+        .datum(topojson.feature(states, states.objects.usStates))
+        .attr("d", path);
+    }
+    
+    function drawCircles() {
+        var populationData = centroid.features.map(i => i.properties.population).sort(d3.ascending);
+        var unemploymentData = centroid.features.map(i => i.properties.unemployment).sort(d3.ascending);
+        console.log(d3.max(populationData));
+
+        svg_map.selectAll(".symbol")
+        .data(centroid.features.sort((a, b) => b.properties.population - a.properties.population))
+        .join(
+          enter => enter.append("path")
+            .attr("class", "symbol")
+            .attr("fill", "green")
+            .attr("d", path.pointRadius(d => 10))
+            );
+    }
+
+    function drawScatter() {
+        //Getting all the Dataset and setting y&x scales
+        var populationD = centroid.features.map(i => i.properties.population);
+        var unemploymentD = centroid.features.map(i => i.properties.unemployment);
+        
+        var dataset = d3.zip(populationD, unemploymentD);
+        var xMinMax = d3.extent(dataset, d => d[0]);
+        var yMinMax = d3.extent(dataset, d => d[1]);
+ 
+        var xScale = d3.scaleLinear().domain([0, xMinMax[1]]).range([0, (width_map - margin.left*4)]);
+                                          
+        var yScale = d3.scaleLinear().domain([0, yMinMax[1]]).range([(height_map - margin.top - margin.bottom), 0]);
+        
+
+        // XAxis
+        var xAxis = d3.axisBottom()
+            .scale(xScale);
+    
+        svg_scatter.append("g")
+            .attr("transform", "translate(0," +(height_map - margin.top - margin.bottom) + ")")
+            .call(xAxis);
+        svg_scatter.append("text")
+            .attr("transform",
+                    "translate("+ (width_map/2)+","+(height_map  )+")")
+            .style("text-anchor", "middle")
+            .text("POPULATION")
+
+
+        //YAxis
+        var yAxis = d3.axisLeft()
+            .scale(yScale);
+        svg_scatter.append("g")
+            .attr("transform", "translate(0," +(0) + ")")
+            .call(yAxis);
+        svg_scatter.append("text")
+            .attr("transform", "rotate(-90)")
+            .attr("y", - margin.left - margin.right )
+            .attr("x", 0 - (height_map/2))
+            .attr("dy", "1em")
+            .style("text-anchor", "middle")
+            .text("UNEMPLOYMENT RATE");
+           
+        const brush = d3.brush()
+            .on("start", brushStart)
+            .on("brush", brushed)
+            .extent([
+            [-margin.left, -margin.top],
+            [width_map + margin.right, height_map + margin.bottom]
+            ]);
+
+        const gBrush = svg_scatter.append("g").attr("class", "gBrush");
+        gBrush.call(brush);
+        svg_scatter.selectAll("circle")
+            // Find all circle elements
+            .data(dataset)
+            // Compare them against the dataset
+            .enter().append("circle") // Create new circle elements for each data point
+            .attr("cx", d => xScale(d[0])) // Use the x and y mappings (xScale / yScale) to
+            .attr("cy", d => yScale(d[1])) // determine the center of the circle
+            .attr("r", 5); // Set the radius to 5
+    }
+
+    
+
+
+
+
+
+    function brushStart() {
+        if (d3.brushSelection(this)[0][0] == d3.brushSelection(this)[1][0]) {
+            circle.style("fill", "red");
+        }
+    }
+    function brushed() {
+        // use d3.brushSelection to get bounds of the brush
+        const ext = d3.brushSelection(this);
+        // BrushSelection returns the current brush selection for the specified node.
+        // [[x0, y0], [x1, y1]] Format. x0 is min x-val. x1 is max x-val. same for y
+        console.log(ext);
+
+
+        scatter_svg.style("fill", d => {
+          // if parts of any circles fall within the bounds of the brush, make them colourful!
+          if (
+            d.x >= ext[0][0] - radius &&
+            d.x <= ext[1][0] + radius &&
+            d.y >= ext[0][1] - radius &&
+            d.y <= ext[1][1] + radius
+          ) {
+            return d.brushColor;
+          }
+        });
+      }
+
+
+    async function ready() {
+        // load files async; store the valeus so we can use them later
+        states = await d3.json("states.json");
+        centroid = await d3.json("states-centroid-data.json");
+
+        drawStates();
+        drawCircles();
+    }
+
+    ready();
+
+
+</script>

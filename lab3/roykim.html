@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>roykim</title>
+    <link rel="shortcut icon" href="#"> <!--added-->
+  </head>
+<style>
+  .states {
+    fill: #ccc;
+    stroke: #fff;
+  }
+
+  .symbol {
+    fill-opacity: .8;
+    stroke: #fff;
+  }
+  
+  /* body {
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+  } */
+  .map, .scatter, .bar_div {
+      float: left;
+  }
+  .bar_div {
+    display: flex;
+    align-items: center;
+  }
+</style>
+<body>
+  <svg class="map">
+  </svg>
+  <svg class="scatter">
+  </svg>
+  <div class="bar_div">
+    <svg class="bar">
+    </svg>
+    <select class="dropdown"></select>
+  </div>
+  
+</body>
+ <!-- d3 v7 integration -->
+ <script src="https://d3js.org/d3.v7.min.js"></script>
+ <!-- d3 topojson -->
+ <script src="http://d3js.org/topojson.v1.min.js"></script>
+
+ <script>
+    let states, centroid;
+    let brush_chosen = [];
+		async function ready() {
+      // load files async; store the values so we can use them later
+      states = await d3.json("states.json");
+      centroid = await d3.json("states-centroid-data.json");
+
+      drawStates();
+      drawCircles();
+      drawScatter();
+			init_barAxes();
+      drawBars();
+    }   
+
+    // Map
+    let map_scale_factor = 0.6;
+    let map_width = 960*map_scale_factor
+    let map_height = 500*map_scale_factor;
+
+    let projection = d3.geoAlbersUsa();
+    let path = d3.geoPath()
+      .projection(projection);
+
+
+    let map_svg = d3.select(".map")
+      .attr("width", map_width)
+      .attr("height", map_height)
+      .append("g");
+      // .attr("width", map_width * map_scale_factor)
+      // .attr("height", map_height * map_scale_factor);
+      // .attr("transform",`scale(${map_scale_factor})`);
+
+    // let variableOptions = ["none", "population", "unemployment"]; // for lab 2
+    // let sizeVar, colorVar;
+
+
+    function drawStates() {
+      map_svg.append("path")
+        .attr("class", "states")
+        .datum(topojson.feature(states, states.objects.usStates))
+        .attr("d", path)
+        .attr("transform",`scale(${map_scale_factor})`);
+    }
+
+    function drawCircles() {
+      map_svg.selectAll(".symbol")
+        .data(centroid.features.sort((a, b) => b.properties.population - a.properties.population))
+        .join(
+          enter => enter.append("path")
+            .attr("class", "symbol")
+            .attr("d", path.pointRadius(d => 10))
+            .attr("fill", "green")
+          ,
+          update => update
+            .attr("fill", d => {
+                if (brush_chosen.includes(d.properties.name)) {return "blue"}
+                else {return "green"}
+            })
+        )
+        .attr("transform",`scale(${map_scale_factor})`);
+    }
+
+    // __________________________________________________________________________________________
+    // Scatter
+
+    let margin = { top: 20, right: 0, bottom: 40, left: 50 };
+    let scatter_width = map_width - margin.left - margin.right;
+    let scatter_height = map_height - margin.top - margin.bottom;
+
+    let scatter_svg = d3.select(".scatter")
+      .style("width", map_width + margin.left + margin.right)
+      .style("height", map_height + margin.top + margin.bottom)
+      .append("g")
+      .attr("viewBox", [0, 0, scatter_width, scatter_height])
+      .attr("transform", `translate(${margin.left} ,  ${margin.top})`);
+
+
+    function drawScatter() {
+      let x_max = d3.max(centroid.features, d => d.properties.population);
+      let y_max = d3.max(centroid.features, d => d.properties.unemployment);
+      // let MAX = d3.max([x_max, y_max]);
+      
+      let xScale = d3.scaleLinear()
+        .domain([0, x_max])
+        .range([0, scatter_width]);
+
+      let yScale = d3.scaleLinear()
+        .domain([0, y_max])
+        .range([scatter_height, 0]); // puts origin on bottom right by flipping y-axis
+
+      let radius = 5;
+      
+      // drawing circles
+      let circle = scatter_svg.selectAll("circle")       // Find all circle elements
+        .data(centroid.features.sort((a, b) => b.properties.population - a.properties.population))           // Compare them against the dataset
+        .enter().append("circle")  // Create new circle elements for each data point
+        .attr("cx", d => xScale(d.properties.population))  // Use the x and y mappings (xScale/yScale) to
+        .attr("cy", d => yScale(d.properties.unemployment))  // determine the center of the circle
+        .attr("r", radius)                // Set the radius to 5
+        .style("fill", "black")
+        .attr("chosen", false);
+
+      let xAxis = d3.axisBottom()
+        .scale(xScale);
+    
+      scatter_svg.append("g")
+        .attr("transform", `translate(0, ${scatter_height})`) // moves the axis down by "height" 
+        .call(xAxis);
+    
+      scatter_svg.append("text")
+        .attr("x", scatter_width / 2)
+        .attr("y", scatter_height + margin.bottom)
+        .attr("dy", "1em")
+        .style("text-anchor", "middle")
+        .text("Population"); 
+
+      let yAxis = d3.axisLeft()
+        .scale(yScale); 
+      
+      scatter_svg.append("g") 
+        .call(yAxis);
+      
+      scatter_svg.append("text")
+        .attr("transform", "rotate(-90)")
+        .attr("y", 0 - margin.left)
+        .attr("x",0 - (scatter_height / 2))
+        .attr("dy", "1em")
+        .style("text-anchor", "middle")
+        .text("Unemployment %");
+      
+      let brush = d3.brush()
+        .on("start", brushStart)
+        .on("brush", brushed)
+        // .on("end", brushEnd) // no function needed
+        .extent(
+          [[-margin.left, -margin.top],
+          [scatter_width + margin.right, scatter_height + margin.bottom]]
+        );
+      let scatter_svg_brush = scatter_svg.append("g")
+        .attr("class", "scatter_svg_brush");
+      scatter_svg_brush.call(brush);
+
+      function brushStart() {
+        // if no selection already exists, colour all circles black
+        if (d3.brushSelection(this)[0][0] == d3.brushSelection(this)[1][0]) {
+          circle
+            .attr("chosen", false)
+            .style("fill", "black");
+        }
+        brush_chosen.length = 0;
+        drawCircles();
+        drawBars();
+      }
+      
+      function brushed() {
+        function inBounds(d) {
+          if (
+              xScale(d.properties.population) >= selectionBounds[0][0] - radius &&
+              xScale(d.properties.population) <= selectionBounds[1][0] + radius &&
+              yScale(d.properties.unemployment) >= selectionBounds[0][1] - radius &&
+              yScale(d.properties.unemployment) <= selectionBounds[1][1] + radius
+            ) {return true}
+          return false
+        }
+        const selectionBounds = d3.brushSelection(this);
+        circle
+          .style("fill", d => {
+            if (inBounds(d)) {return "blue"}
+            else {return "black"}
+          })
+          .attr("chosen", d => {
+            if (inBounds(d)) {
+              if (!brush_chosen.includes(d.properties.name)) {
+                brush_chosen.push(d.properties.name)
+              }
+              return true}
+            else {return false}
+          });
+        drawCircles();
+        drawBars();
+      }
+
+
+      return scatter_svg.node(); 
+    }
+
+    // _____________________________________________________________________________________________________________________________-
+    // Bar
+    
+    let bar_svg = d3.select(".bar")
+      .style("width", map_width + margin.left + margin.right)
+      .style("height", map_height + margin.top + margin.bottom)
+      .append("g")
+      .attr("viewBox", [0, 0, scatter_width, scatter_height])
+      .attr("transform", `translate(${margin.left} ,  ${margin.top})`);
+
+    let barwidth_factor = 0.9;
+
+		function init_barAxes() {
+			let y_max = d3.max(centroid.features, d => d.properties.unemployment);
+
+			let state_names = centroid.features
+        .map(d => d.properties.name)
+				.sort();
+			
+			let xScale = d3.scaleBand()
+        .domain(state_names)
+        .range([0, scatter_width]);
+      let xAxis = d3.axisBottom()
+        .scale(xScale);
+			let yScale = d3.scaleLinear()
+        .domain([0,y_max])
+        .range([scatter_height, 0]);
+			let yAxis = d3.axisLeft()
+				.scale(yScale);
+
+			bar_svg.append("g")
+				.attr("class", "yAxis")
+        .call(yAxis);
+      bar_svg.append("g")
+				.attr("class", "xAxis")
+				.attr("transform", `translate(0, ${scatter_height})`) // moves the axis down by "height" 
+				.call(xAxis)
+				.selectAll("text")
+					.style("text-anchor", "end")
+					.attr("dx", "-.8em")
+					.attr("dy", ".15em")
+					.attr("transform", "rotate(-65)")
+
+			bar_svg.append("text")
+				.attr("transform", "rotate(-90)")
+				.attr("y", 0 - margin.left)
+				.attr("x",0 - (scatter_height / 2))
+				.attr("dy", "1em")
+				.style("text-anchor", "middle")
+				.text("Unemployment %");
+		}
+
+    function drawBars() {
+      // let x_max = d3.max(centroid.features, d => d.properties.population);
+      // let y_max = d3.max(centroid.features, d => d.properties.unemployment);
+      // let MAX = d3.max([x_max, y_max]);
+      
+			// function sortByFunc() {
+      //   if (sortBy == "alphabetical") {return ""}
+      //   else if (sortBy == "unemployment") {
+      //     return function(d)
+      //   }
+      // }
+
+			let state_names = centroid.features
+        .sort((a,b) => {
+          if (sortBy == "alphabetical") {
+            return d3.ascending(a.properties.name, b.properties.name)}
+          else if (sortBy == "unemployment") {
+            return d3.descending(a.properties.unemployment, b.properties.unemployment)}
+            // return b.properties.unemployment - a.properties.unemployment}
+          else if (sortBy == "population") {
+            return d3.descending(a.properties.population, b.properties.population)}
+            // return b.properties.population - a.properties.population}
+          })
+        .map(d => d.properties.name)
+				.filter(d => {if (brush_chosen.length == 0) {return true}
+					else {return brush_chosen.includes(d)}}
+					);
+				
+			// console.log(state_names)
+
+      let y_max = d3.max(centroid.features, d => d.properties.unemployment);
+
+      let xScale = d3.scaleBand()
+        .domain(state_names)
+        .range([0, scatter_width]);
+      let xAxis = d3.axisBottom()
+        .scale(xScale);
+			
+			let yScale = d3.scaleLinear() // for the bars
+        .domain([0,y_max])
+        .range([scatter_height, 0]);
+      
+			let t = d3.transition()
+        .duration(1000);
+
+			bar_svg.selectAll("g.xAxis")
+				.transition(t)
+				.call(xAxis)
+				.selectAll("text")
+					.style("text-anchor", "end")
+					.attr("dx", "-.8em")
+					.attr("dy", ".15em")
+					.attrTween("transform", function() {
+            return function(t) {return "rotate(-65)"}
+          });
+			
+			
+      
+      bar_svg.selectAll("rect")
+        // .data(centroid.features.sort((a, b) => b.properties.population - a.properties.population))
+        .data(centroid.features.filter(d => state_names.includes(d.properties.name)))
+        .join(
+
+          enter => enter
+            .append("rect")
+            .attr("x", d => xScale(d.properties.name) + (xScale.bandwidth() * (1-barwidth_factor))/2)
+            .attr("width", xScale.bandwidth() * barwidth_factor)
+            .attr("y", yScale(0))
+            .attr("fill", "blue")
+            .transition(t)
+            .attr("y", d => yScale(d.properties.unemployment))
+            .attr("height", d => scatter_height - yScale(d.properties.unemployment))
+          ,
+          update => update
+            .transition(t)
+            .attr("x", d => xScale(d.properties.name) + (xScale.bandwidth() * (1-barwidth_factor))/2) // xScale modified with the brush
+            .attr("width", xScale.bandwidth() * barwidth_factor)
+            .attr("y", d => yScale(d.properties.unemployment))
+            .attr("height", d => scatter_height - yScale(d.properties.unemployment))
+          ,
+          exit => exit
+            .transition(t)
+            .attr("y", yScale(0))
+            .attr("height", 0)
+            .remove()
+        )
+        
+    }
+
+    let sortOptions = ["alphabetical", "unemployment", "population"];
+    let sortBy = "alphabetical";
+
+    d3.select(".dropdown")
+      .selectAll("myOptions")
+        .data(sortOptions)
+      .enter()
+        .append("option")
+      .text(function (d) {return d;})
+      .attr("value", function (d) {return d;});
+    
+    d3.select(".dropdown").on("change", function(d) {
+        // recover the option that has been chosen
+      sortBy = d3.select(this).property("value")
+      drawBars();
+    })
+    
+    // call the function that draws
+    ready();
+
+ </script>
